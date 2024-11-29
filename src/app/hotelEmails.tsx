@@ -61,9 +61,9 @@ export default function HotelEmails() {
                             <DatePicker
                                 selected={startDate}
                                 onChange={(date) => {
-                                    setStartDate(date);
+                                    setStartDate(date || undefined);
                                     if (endDate && date && date > endDate) {
-                                        setEndDate(null); // Reset end date if start date is after it
+                                        setEndDate(undefined); // Reset end date if start date is after it
                                     }
                                 }}
                                 selectsStart

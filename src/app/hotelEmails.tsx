@@ -8,8 +8,8 @@ import 'react-datepicker/dist/react-datepicker.css';
 export default function HotelEmails() {
     const [hotelEmails, setHotelEmails] = useState<string[]>([]);
     const [email, setEmail] = useState('');
-    const [startDate, setStartDate] = useState<Date | null>(null);
-    const [endDate, setEndDate] = useState<Date | null>(null);
+    const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+    const [endDate, setEndDate] = useState<Date | undefined>(undefined);
     const [guestCount, setGuestCount] = useState<number>(1); // Default to 1 guest
     const [extraWishes, setExtraWishes] = useState<string>('');
 

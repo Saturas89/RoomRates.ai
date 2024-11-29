@@ -1,5 +1,5 @@
 import Image from "next/image";
-import HotelEmails from './HotelEmails';
+import HotelEmails from './hotelEmails';
 
 export default function Home() {
   return (

@@ -105,7 +105,7 @@ export default function HotelEmails() {
                     </FormControl>
 
                     {/* Send Request Button */}
-                    <Button colorScheme="blue" onClick={handleSendRequest} width="full">
+                    <Button colorScheme="teal" onClick={handleSendRequest} width="full">
                         Send Request
                     </Button>
                 </Stack>

@@ -74,7 +74,7 @@ export default function HotelEmails() {
                             />
                             <DatePicker
                                 selected={endDate}
-                                onChange={(date) => setEndDate(date)}
+                                onChange={(date) => setEndDate(date || undefined)}
                                 selectsEnd
                                 startDate={startDate}
                                 endDate={endDate}

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@chakra-ui/react": "^2.8.2",
+    "@ducanh2912/next-pwa": "^10.2.9",
     "@emotion/react": "^11.13.5",
     "@emotion/styled": "^11.13.5",
     "chakra-dayzed-datepicker": "^0.3.0",

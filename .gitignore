@@ -38,3 +38,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# playwright and verification scripts
+/verification/
+__pycache__/
+*.pyc
+
+# python virtual environment
+.venv/
+venv/
+env/
+
+# logs
+*.log
+
+# PWA service workers
+/public/sw.js
+/public/sw.js.map
+/public/workbox-*.js

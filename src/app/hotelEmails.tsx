@@ -23,7 +23,7 @@ export default function HotelEmails() {
         setIsSearching(true);
         try {
             // First check if it's already an email
-            if (hotelQuery.includes('@') && hotelQuery.includes('.')) {
+            if (hotelQuery.includes('@') && !hotelQuery.startsWith('http') && hotelQuery.includes('.')) {
                 if (!hotelEmails.includes(hotelQuery)) {
                     setHotelEmails([...hotelEmails, hotelQuery]);
                 }
@@ -32,11 +32,68 @@ export default function HotelEmails() {
                 return;
             }
 
+            let searchQuery = hotelQuery;
+
+            // Check if it is a booking.com url
+            if (hotelQuery.includes('booking.com/hotel/')) {
+                try {
+                    let extractedName = '';
+                    let detailsExtracted = false;
+
+                    const urlObj = new URL(hotelQuery.startsWith('http') ? hotelQuery : `https://${hotelQuery}`);
+                    const match = urlObj.pathname.match(/\/hotel\/[a-zA-Z0-9-]+\/([^.]+)/);
+                    if (match && match[1]) {
+                        extractedName = match[1].split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                        searchQuery = extractedName;
+                    }
+
+                    // Booking.com can have params in hash or search, sometimes separated by semicolons
+                    const paramSource = (urlObj.search || urlObj.hash || '').replace(/;/g, '&');
+                    const paramString = paramSource.startsWith('?') || paramSource.startsWith('#') ? paramSource.substring(1) : paramSource;
+                    const searchParams = new URLSearchParams(paramString);
+
+                    const checkin = searchParams.get('checkin');
+                    const checkout = searchParams.get('checkout');
+                    const groupAdults = searchParams.get('group_adults');
+
+                    if (checkin && checkout) {
+                        setStartDate(new Date(checkin));
+                        setEndDate(new Date(checkout));
+                        detailsExtracted = true;
+                    }
+
+                    if (groupAdults) {
+                        setGuestCount(Number(groupAdults));
+                        detailsExtracted = true;
+                    }
+
+                    if (extractedName && detailsExtracted) {
+                        toast({
+                            title: 'Booking.com details extracted!',
+                            description: `Found hotel: ${extractedName}, along with dates/guests.`,
+                            status: 'success',
+                            duration: 4000,
+                            isClosable: true,
+                        });
+                    } else if (extractedName) {
+                        toast({
+                            title: 'Hotel name extracted',
+                            description: `Found hotel: ${extractedName}`,
+                            status: 'info',
+                            duration: 3000,
+                            isClosable: true,
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to parse booking.com URL", e);
+                }
+            }
+
             // Otherwise, search for it
             const response = await fetch('/api/find-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: hotelQuery })
+                body: JSON.stringify({ query: searchQuery })
             });
 
             const data = await response.json();

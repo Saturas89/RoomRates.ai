@@ -1,20 +1,91 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Input, FormControl, FormLabel, Textarea, Box, Heading, Stack, HStack, useToast, Text } from '@chakra-ui/react';
+import { Button, Input, FormControl, FormLabel, Textarea, Box, Heading, Stack, HStack, useToast, Text, Checkbox } from '@chakra-ui/react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { FiMail, FiTrash2, FiSearch } from 'react-icons/fi';
+
+import { Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, useDisclosure } from '@chakra-ui/react';
+
+export interface HotelData {
+    id: string;
+    name: string;
+    price: string;
+    review: string;
+}
 
 export default function HotelEmails() {
     const [hotelEmails, setHotelEmails] = useState<string[]>([]);
     const [hotelQuery, setHotelQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
+    const { isOpen, onOpen, onClose } = useDisclosure();
+    const [bookingUrl, setBookingUrl] = useState('');
+    const [htmlContent, setHtmlContent] = useState('');
+    const [isScraping, setIsScraping] = useState(false);
+
+    // Extracted Hotels State
+    const [fetchedHotels, setFetchedHotels] = useState<HotelData[]>([]);
+    const [selectedHotels, setSelectedHotels] = useState<Set<string>>(new Set());
+
     const [startDate, setStartDate] = useState<Date | undefined>(undefined);
     const [endDate, setEndDate] = useState<Date | undefined>(undefined);
     const [guestCount, setGuestCount] = useState<number>(2); // Default to 2 guests
     const [extraWishes, setExtraWishes] = useState<string>('Is it possible to get a room with a balcony?');
     const toast = useToast();
+
+    const handleToggleHotelSelection = (hotelId: string) => {
+        const newSelected = new Set(selectedHotels);
+        if (newSelected.has(hotelId)) {
+            newSelected.delete(hotelId);
+        } else {
+            newSelected.add(hotelId);
+        }
+        setSelectedHotels(newSelected);
+    };
+
+    const handleProcessSelectedHotels = async () => {
+        const selected = fetchedHotels.filter(h => selectedHotels.has(h.id));
+        if (selected.length === 0) return;
+
+        setIsSearching(true);
+        let addedCount = 0;
+
+        for (const hotel of selected) {
+            try {
+                const response = await fetch('/api/find-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: hotel.name })
+                });
+                const data = await response.json();
+                if (data.emails && data.emails.length > 0) {
+                    const firstEmail = data.emails[0];
+                    setHotelEmails(prev => {
+                        if (!prev.includes(firstEmail)) {
+                            addedCount++;
+                            return [...prev, firstEmail];
+                        }
+                        return prev;
+                    });
+                }
+            } catch (e) {
+                console.error(`Failed to fetch email for ${hotel.name}`, e);
+            }
+        }
+
+        setIsSearching(false);
+        setFetchedHotels([]);
+        setSelectedHotels(new Set());
+
+        toast({
+            title: 'Processing complete',
+            description: `Found and added ${addedCount} emails from selected hotels.`,
+            status: addedCount > 0 ? 'success' : 'warning',
+            duration: 4000,
+            isClosable: true,
+        });
+    };
 
     const handleSearchEmail = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,6 +104,15 @@ export default function HotelEmails() {
             }
 
             let searchQuery = hotelQuery;
+
+            // Check if it is a generic booking.com search url
+            if (hotelQuery.includes('booking.com/searchresults')) {
+                setBookingUrl(hotelQuery);
+                setHtmlContent('');
+                onOpen();
+                setIsSearching(false);
+                return;
+            }
 
             // Check if it is a booking.com url
             if (hotelQuery.includes('booking.com/hotel/')) {
@@ -137,6 +217,51 @@ export default function HotelEmails() {
         setHotelEmails(hotelEmails.filter((e) => e !== emailToRemove));
     };
 
+    const handleManualScrape = async () => {
+        setIsScraping(true);
+        try {
+            const fetchRes = await fetch('/api/fetch-booking', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: htmlContent })
+            });
+
+            const fetchData = await fetchRes.json();
+
+            if (fetchRes.ok && fetchData.hotels && fetchData.hotels.length > 0) {
+                setFetchedHotels(fetchData.hotels);
+                toast({
+                    title: 'Hotels found',
+                    description: `Found ${fetchData.hotels.length} hotels. You can now select them.`,
+                    status: 'success',
+                    duration: 4000,
+                    isClosable: true,
+                });
+                onClose();
+            } else {
+                toast({
+                    title: 'Extraction Failed',
+                    description: fetchData.error || 'Could not extract any hotels from this HTML.',
+                    status: 'warning',
+                    duration: 5000,
+                    isClosable: true,
+                });
+            }
+        } catch (e) {
+            console.error("Failed to extract booking search results", e);
+            toast({
+                title: 'Error',
+                description: 'Failed to extract booking.com results.',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+        } finally {
+            setIsScraping(false);
+            setHotelQuery('');
+        }
+    };
+
     const handleSendRequest = () => {
         if (hotelEmails.length === 0) {
             toast({
@@ -199,6 +324,45 @@ Best regards,`;
 
     return (
         <Box maxWidth="600px" mx="auto" p={6} borderWidth={1} borderRadius="xl" boxShadow="xl" bg="white" color="gray.800">
+
+            <Modal isOpen={isOpen} onClose={onClose} size="xl">
+                <ModalOverlay />
+                <ModalContent bg="white">
+                    <ModalHeader>Manual Booking.com Extraction</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody>
+                        <Stack spacing={4}>
+                            <Text>Since automated scraping is often blocked by Captchas, you can extract the data manually:</Text>
+                            <Box pl={4}>
+                                <ol className="list-decimal space-y-2">
+                                    <li>Open this link in a new tab: <a href={bookingUrl} target="_blank" rel="noopener noreferrer" className="text-teal-600 underline">Booking.com Search</a></li>
+                                    <li>Complete any Captchas if they appear and let the search results load.</li>
+                                    <li>Press <kbd className="bg-gray-100 border px-1 rounded">Ctrl+U</kbd> (or <kbd className="bg-gray-100 border px-1 rounded">Cmd+Option+U</kbd> on Mac) to view the page source.</li>
+                                    <li>Press <kbd className="bg-gray-100 border px-1 rounded">Ctrl+A</kbd> then <kbd className="bg-gray-100 border px-1 rounded">Ctrl+C</kbd> to copy all the HTML.</li>
+                                    <li>Paste the copied HTML into the box below:</li>
+                                </ol>
+                            </Box>
+                            <Textarea
+                                placeholder="Paste HTML here..."
+                                value={htmlContent}
+                                onChange={(e) => setHtmlContent(e.target.value)}
+                                rows={6}
+                                size="sm"
+                            />
+                        </Stack>
+                    </ModalBody>
+
+                    <ModalFooter>
+                        <Button variant="ghost" mr={3} onClick={onClose}>
+                            Cancel
+                        </Button>
+                        <Button colorScheme="teal" onClick={handleManualScrape} isLoading={isScraping} isDisabled={!htmlContent}>
+                            Extract Hotels
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
             <Heading as="h2" size="xl" mb={6} textAlign="center" color="teal.600">
                 Hotel Deal Finder
             </Heading>
@@ -232,6 +396,41 @@ Best regards,`;
                             </Button>
                         </HStack>
                     </FormControl>
+
+                    {fetchedHotels.length > 0 && (
+                        <Box bg="blue.50" p={4} borderRadius="md" borderWidth={1} borderColor="blue.100">
+                            <Heading as="h3" size="sm" mb={3} color="blue.800">Fetched Hotels ({fetchedHotels.length}):</Heading>
+                            <Stack spacing={2} maxHeight="300px" overflowY="auto" mb={3}>
+                                {fetchedHotels.map((hotel) => (
+                                    <HStack key={hotel.id} justify="space-between" bg="white" p={3} borderRadius="sm" borderWidth={1}>
+                                        <Checkbox
+                                            isChecked={selectedHotels.has(hotel.id)}
+                                            onChange={() => handleToggleHotelSelection(hotel.id)}
+                                            colorScheme="teal"
+                                        >
+                                            <Box ml={2}>
+                                                <Text fontWeight="bold" fontSize="sm">{hotel.name}</Text>
+                                                <HStack spacing={4} mt={1}>
+                                                    <Text fontSize="xs" color="gray.600">Price: {hotel.price}</Text>
+                                                    <Text fontSize="xs" color="gray.600">Review: {hotel.review}</Text>
+                                                </HStack>
+                                            </Box>
+                                        </Checkbox>
+                                    </HStack>
+                                ))}
+                            </Stack>
+                            <Button
+                                colorScheme="blue"
+                                size="sm"
+                                onClick={handleProcessSelectedHotels}
+                                isLoading={isSearching}
+                                isDisabled={selectedHotels.size === 0}
+                                width="full"
+                            >
+                                Find Emails for Selected Hotels ({selectedHotels.size})
+                            </Button>
+                        </Box>
+                    )}
 
                     {hotelEmails.length > 0 && (
                         <Box bg="teal.50" p={4} borderRadius="md" borderWidth={1} borderColor="teal.100">
